@@ -76,9 +76,10 @@ class GPT(nn.Module):
         self.ln = nn.LayerNorm(emb_dim)
         self.linear = nn.Linear(emb_dim, vocab_size)
     
-    def forward(self, x):
+    def forward(self, x, targets=None):
         tok_embs = self.tok_emb(x) # (B, T, C)
-        pos_embs = self.pos_emb(torch.arange(x.size(1), device=x.device)) # (B, T, C)
+        pos = torch.arange(x.size(1), device=x.device)
+        pos_embs = self.pos_emb(pos)[None, :, :]
 
         x = pos_embs + tok_embs # (B, T, C)
         x = self.transformer(x)
@@ -86,12 +87,20 @@ class GPT(nn.Module):
 
         logits = self.linear(x)
 
-        return logits # (B, T, vocab_size)
+        if targets is not None:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+        else:
+            loss = None
+
+        return logits, loss # (B, T, vocab_size)
 
     def generate(self, ids, max_char):
         _, T = ids.shape
         for _ in range(max_char):
-            logits = self(ids[:, -self.context_length:]) # (B, T, vocab_size)
+            logits, _ = self(ids[:, -self.context_length:]) # (B, T, vocab_size)
             logits = logits[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             new_id = torch.multinomial(probs, num_samples=1, replacement=True)
