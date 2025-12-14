@@ -107,7 +107,7 @@ class GPT(nn.Module):
             cutoff = v[:, -1].unsqueeze(-1)
             logits = logits.masked_fill(logits < cutoff, float("-inf"))
             probs = F.softmax(logits, dim=-1)
-            new_id = torch.multinomial(probs, dim=-1, keepdim=True)
+            new_id = torch.multinomial(probs, num_samples=1, keepdim=True)
             ids = torch.cat([ids, new_id], dim=1)
         
         return ids
