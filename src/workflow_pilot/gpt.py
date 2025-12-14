@@ -91,19 +91,23 @@ class GPT(nn.Module):
             B, T, C = logits.shape
             logits = logits.view(B*T, C)
             targets = targets.view(B*T)
-            loss = F.cross_entropy(logits, targets)
+            loss = F.cross_entropy(logits, targets, ignore_index=-100)
         else:
             loss = None
 
         return logits, loss # (B, T, vocab_size)
 
-    def generate(self, ids, max_char):
+    def generate(self, ids, max_char, temperature=0.7, top_k=50):
         _, T = ids.shape
         for _ in range(max_char):
             logits, _ = self(ids[:, -self.context_length:]) # (B, T, vocab_size)
             logits = logits[:, -1, :]
+            logits = logits / temperature
+            v, _ = torch.topk(logits, k=top_k, dim=-1)
+            cutoff = v[:, -1].unsqueeze(-1)
+            logits = logits.masked_fill(logits < cutoff, float("-inf"))
             probs = F.softmax(logits, dim=-1)
-            new_id = torch.multinomial(probs, num_samples=1, replacement=True)
+            new_id = torch.multinomial(probs, dim=-1, keepdim=True)
             ids = torch.cat([ids, new_id], dim=1)
         
         return ids
